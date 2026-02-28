@@ -35,7 +35,6 @@
       user-select:none;
     }
 
-    /* center dot */
     .center-dot{
       position:absolute;
       left:50%;
@@ -50,46 +49,61 @@
       pointer-events:none;
     }
 
-    /* generic hand container that is positioned so its bottom sits exactly at the center */
     .hand{
       position:absolute;
       left:50%;
       top:50%;
-      /* bottom (pivot) will be placed at center using translate(-50%,-100%) below */
       transform-origin: 50% 100%;
       display:flex;
-      flex-direction: column-reverse; /* stack from center outward */
+      flex-direction: column-reverse;
       align-items:center;
       pointer-events:none;
       transition: transform 0.25s cubic-bezier(.2,.9,.3,1);
-      /* ensure it's placed so its bottom equals the center */
       transform: translate(-50%,-100%) rotate(0deg);
       -webkit-font-smoothing:antialiased;
       -moz-osx-font-smoothing:grayscale;
     }
 
-    /* heights define how long the hand extends from center */
-    .hour-line { height:120px; font-size:18px; color:#fbbf24; text-shadow:0 0 8px rgba(251,191,36,0.6); z-index:30; }
+    .hour-line   { height:120px; font-size:18px; color:#fbbf24; text-shadow:0 0 8px rgba(251,191,36,0.6); z-index:30; }
     .minute-line { height:160px; font-size:16px; color:#38bdf8; text-shadow:0 0 8px rgba(56,189,248,0.6); z-index:25; }
     .second-line { height:190px; font-size:14px; color:#ef4444; text-shadow:0 0 8px rgba(239,68,68,0.6); z-index:20; }
 
-    /* each repeating digit "chip" */
     .digit{
       display:block;
       padding:4px 8px;
-      margin-bottom:6px;            /* spacing outward from center */
+      margin-bottom:6px;
       border-radius:8px;
       font-weight:700;
       letter-spacing:0.6px;
       background:rgba(255,255,255,0.02);
       backdrop-filter: blur(2px);
       box-shadow: 0 1px 0 rgba(255,255,255,0.02), 0 2px 8px rgba(2,6,23,0.6);
-      transform-origin:center center; /* used when we counter-rotate digits */
+      transform-origin:center center;
       white-space:nowrap;
       pointer-events:none;
     }
 
-    /* digital time readout */
+    .date-window{
+      position:absolute;
+      top:50%;
+      right:18%;
+      transform:translateY(-50%);
+      width:48px;
+      height:32px;
+      background:#111827;
+      border-radius:6px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:700;
+      font-size:15px;
+      color:#e5e7eb;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.6), 0 2px 6px rgba(0,0,0,0.4);
+      border:1px solid rgba(255,255,255,0.1);
+      pointer-events:none;
+      z-index:0;
+    }
+
     .digital-time{
       position:absolute;
       left:50%;
@@ -100,11 +114,10 @@
       letter-spacing:2px;
       font-size:20px;
       text-shadow:0 0 8px rgba(0,0,0,0.6);
-      /* z-index:50; */
       pointer-events:none;
+      z-index:0;
     }
 
-    /* tick mark container: we place it around the clock via JS transforms */
     .tick{
       position:absolute;
       left:50%;
@@ -117,7 +130,6 @@
       pointer-events:none;
     }
 
-    /* the small mark - NOW TALL AND THIN */
     .tick .mark{
       display:block;
       width:4px;
@@ -125,10 +137,8 @@
       border-radius:3px;
       background:var(--tick-color);
       box-shadow: 0 0 6px rgba(255,255,255,0.03);
-      transform-origin:center center;
     }
 
-    /* make everything crisp on small screens */
     @media (max-width:450px){
       :root{ --size:320px; }
     }
@@ -137,111 +147,80 @@
 <body>
   <div id="clock" aria-label="Analog-digital clock">
     <div class="center-dot"></div>
-
-    <!-- hands (empty — JS fills digits inside) -->
-    <div class="hand hour-line" id="hourLine"></div>
-    <div class="hand second-line" id="secondLine"></div>
+    <div class="date-window" id="dateWindow"></div>
+    <div class="hand hour-line"   id="hourLine"></div>
     <div class="hand minute-line" id="minuteLine"></div>
-
-    <!-- tick marks (JS will add 12 of them) -->
+    <div class="hand second-line" id="secondLine"></div>
     <div id="ticks"></div>
-
     <div class="digital-time" id="digitalTime">00:00:00</div>
   </div>
 
   <script>
-    // create the 12 ticks (single run)
-    (function createTicks(){
-      const $clock = $("#clock");
-      const size = $clock.width(); // uses CSS var size
-      // radius: distance from center to where tick should be placed
-      const radius = Math.round(Math.min($clock.width(), $clock.height())/2 - 36); // keep inside border
-      for(let i=1;i<=12;i++){
-        const angle = i * 30; // degrees
-        const $t = $('<div class="tick"><span class="mark"></span></div>');
-        // place tick: move element from center outward by radius after rotating
-        $t.css("transform", `translate(-50%,-50%) rotate(${angle}deg) translateY(-${radius}px)`);
-        
-        // No counter-rotation is needed here, the mark inherits its parent's rotation.
-        
-        $clock.append($t);
+    // ── Init: ticks ───────────────────────────────────────────────
+    (function createTicks() {
+      const $clock  = $("#clock");
+      const radius  = Math.round(Math.min($clock.width(), $clock.height()) / 2 - 36);
+      for (let i = 1; i <= 12; i++) {
+        $('<div class="tick"><span class="mark"></span></div>')
+          .css("transform", `translate(-50%,-50%) rotate(${i * 30}deg) translateY(-${radius}px)`)
+          .appendTo($clock);
       }
     })();
 
-    // fill hand with repeated number chips sized to the hand height
-    function fillHand($hand, value){
-      $hand.empty();
-      // create a probe to measure chip height (uses hand's font-size)
-      const $probe = $('<div class="digit" style="visibility:hidden;position:absolute;left:-9999px">00</div>').appendTo("body"); 
-      const digitH = $probe.outerHeight(true) || 20;
+    // ── Init: measure digit height once (it never changes) ───────
+    const digitHeight = (() => {
+      const $probe = $('<div class="digit" style="visibility:hidden;position:absolute;left:-9999px">00</div>').appendTo("body");
+      const h = $probe.outerHeight(true) || 20;
       $probe.remove();
+      return h;
+    })();
 
-      const handH = $hand.height() || 100;
-      // how many chips fit (reserve a little top space)
-      const count = Math.max(1, Math.floor(handH / (digitH + 2)));
-      const padded = value.toString().padStart(2, "0");
-      for(let i=0;i<count;i++){
-        $hand.append(`<div class="digit">${padded}</div>`);
-      }
-    }
+    // ── Init: cache jQuery references ────────────────────────────
+    const hands = [
+      { $el: $("#hourLine"),   getValue: t => t.getHours(),   getAngle: (H,M,S) => (H % 12) * 30 + M * 0.5, cumAngle: null },
+      { $el: $("#minuteLine"), getValue: t => t.getMinutes(), getAngle: (H,M,S) => M * 6 + S * 0.1,         cumAngle: null },
+      { $el: $("#secondLine"), getValue: t => t.getSeconds(), getAngle: (H,M,S) => S * 6,                   cumAngle: null },
+    ];
 
-    // Track cumulative angles to avoid CSS transition wrap-around
-    const prev = { hourAngle: null, minuteAngle: null, secondAngle: null };
-
-    function normalizeCumulative(newRaw, prevCumulative) {
-      if (prevCumulative === null) return newRaw;
-      // Find the smallest forward delta, never go backwards
-      let delta = newRaw - (prevCumulative % 360);
+    // ── Cumulative angle — prevents CSS transition wrap-around ───
+    function accumulate(raw, prev) {
+      if (prev === null) return raw;
+      let delta = raw - (prev % 360);
       if (delta > 180) delta -= 360;
-      if (delta < -180) delta += 360;
-      // If delta is negative (would animate backwards), add 360 to go forward instead
-      if (delta < 0) delta += 360;
-      return prevCumulative + delta;
+      if (delta < 0)   delta += 360;
+      return prev + delta;
     }
 
-    function updateClock(){
+    // ── Fill hand only if value changed ──────────────────────────
+    function fillHand($hand, value) {
+      const padded = String(value).padStart(2, "0");
+      if ($hand.data("lastValue") === padded) return; // skip if unchanged
+      $hand.data("lastValue", padded);
+
+      const count = Math.max(1, Math.floor(($hand.height() || 100) / (digitHeight + 2)));
+      $hand.html(`<div class="digit">${padded}</div>`.repeat(count));
+    }
+
+    // ── Main update ───────────────────────────────────────────────
+    function updateClock() {
       const now = new Date();
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-      const seconds = now.getSeconds();
+      const [H, M, S] = [now.getHours(), now.getMinutes(), now.getSeconds()];
+      const pad = n => String(n).padStart(2, "0");
 
-      // raw angles (0–360)
-      const rawHour   = (hours % 12) * 30 + minutes * 0.5;
-      const rawMinute = minutes * 6 + seconds * 0.1;
-      const rawSecond = seconds * 6;
+      for (const hand of hands) {
+        const raw   = hand.getAngle(H, M, S);
+        const angle = accumulate(raw, hand.cumAngle);
+        hand.cumAngle = angle;
 
-      // cumulative angles — always move forward, never snap backwards
-      const hourAngle   = normalizeCumulative(rawHour,   prev.hourAngle);
-      const minuteAngle = normalizeCumulative(rawMinute, prev.minuteAngle);
-      const secondAngle = normalizeCumulative(rawSecond, prev.secondAngle);
+        fillHand(hand.$el, hand.getValue(now));
+        hand.$el.css("transform", `translate(-50%,-100%) rotate(${angle}deg)`);
+        hand.$el.find(".digit").css("transform", `rotate(${-angle}deg)`);
+      }
 
-      prev.hourAngle   = hourAngle;
-      prev.minuteAngle = minuteAngle;
-      prev.secondAngle = secondAngle;
-
-      const $hour = $("#hourLine"), $minute = $("#minuteLine"), $second = $("#secondLine");
-
-      // fill (smart count based on available height)
-      fillHand($hour, hours);
-      fillHand($minute, minutes);
-      fillHand($second, seconds);
-
-      // rotate the whole hand — important: keep translate(-50%,-100%) to anchor bottom at center
-      $hour.css("transform", `translate(-50%,-100%) rotate(${hourAngle}deg)`);
-      $minute.css("transform", `translate(-50%,-100%) rotate(${minuteAngle}deg)`);
-      $second.css("transform", `translate(-50%,-100%) rotate(${secondAngle}deg)`);
-
-      // counter-rotate digits so they stay upright
-      $hour.find(".digit").css("transform", `rotate(${-hourAngle}deg)`);
-      $minute.find(".digit").css("transform", `rotate(${-minuteAngle}deg)`);
-      $second.find(".digit").css("transform", `rotate(${-secondAngle}deg)`);
-
-      // digital readout
-      const pad = n => n.toString().padStart(2,"0");
-      $("#digitalTime").text(`${pad(hours)}:${pad(minutes)}:${pad(seconds)}`);
+      $("#digitalTime").text(`${pad(H)}:${pad(M)}:${pad(S)}`);
+      $("#dateWindow").text(now.getDate());
     }
 
-    // tick every second
     setInterval(updateClock, 1000);
     updateClock();
   </script>
